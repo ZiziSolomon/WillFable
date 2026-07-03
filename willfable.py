@@ -50,12 +50,15 @@ PROMPT_TEMPLATE = "Hi Claude, tell me about {title}"
 HASHTAGS = [
     "LLM",
     "Anthropic",
-    "Fable",
+    "Fable",       # on-brand (the model) even if the crowd skews games/AI-art
     "Claude",
     "ClaudeCode",
-    "mythos",
+    "mythos",      # on-brand (the conceit) even if the crowd skews mythology/fiction
     "AI",
     "GenAI",
+    "claudenews",  # top on-target tag found in the audit
+    "aiagents",
+    "claudeai",
 ]
 
 # Wikipedia asks for a descriptive UA with contact info.
