@@ -1,0 +1,15 @@
+name = "willfable-cron"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Fire every 10 minutes. Cloudflare cron is reliable, unlike GitHub's schedule.
+[triggers]
+crons = ["*/10 * * * *"]
+
+[vars]
+REPO = "ZiziSolomon/WillFable"
+WORKFLOW = "willfable.yml"
+REF = "main"
+
+# GH_PAT is a SECRET — do not put it here. Set it with:
+#   wrangler secret put GH_PAT
