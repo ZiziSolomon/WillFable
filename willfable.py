@@ -24,6 +24,7 @@ import os
 import sys
 import json
 import time
+import random
 import datetime
 import urllib.request
 import urllib.error
@@ -41,6 +42,21 @@ DRY_RUN = os.environ.get("WILLFABLE_DRY_RUN") == "1"
 MODEL = "claude-fable-5"
 MAX_TOKENS = 50  # observed to be enough for a real refusal to surface
 PROMPT_TEMPLATE = "Hi Claude, tell me about {title}"
+
+# One hashtag is appended per post, picked at random from this pool. These are
+# the crowds the bot wants to land in — Anthropic / LLM / Fable / mythos.
+# (No leading '#'; it's added when rendering. Bluesky tags are case-insensitive
+# for search but display as written.)
+HASHTAGS = [
+    "LLM",
+    "Anthropic",
+    "Fable",
+    "Claude",
+    "ClaudeCode",
+    "mythos",
+    "AI",
+    "GenAI",
+]
 
 # Wikipedia asks for a descriptive UA with contact info.
 WIKI_UA = "WillFable/1.0 (+https://bsky.app/profile/willfable.bsky.social; contact via Bluesky DM)"
@@ -88,7 +104,30 @@ def fable_will_talk(title: str) -> bool:
     return r.stop_reason != "refusal"
 
 
-def bsky_post(text: str) -> None:
+def with_random_tag(text: str) -> tuple[str, list]:
+    """Append a random hashtag and return (new_text, facets).
+
+    The facet's byte offsets are into the UTF-8 encoding of the returned text,
+    per the atproto richtext spec — NOT character indices. Titles can contain
+    non-ASCII, so we measure in bytes.
+    """
+    tag = random.choice(HASHTAGS)
+    prefix = text + " "
+    new_text = prefix + "#" + tag
+    start = len(prefix.encode("utf-8"))            # byte index of '#'
+    end = len(new_text.encode("utf-8"))            # byte index past tag end
+    facets = [
+        {
+            "index": {"byteStart": start, "byteEnd": end},
+            "features": [
+                {"$type": "app.bsky.richtext.facet#tag", "tag": tag}
+            ],
+        }
+    ]
+    return new_text, facets
+
+
+def bsky_post(text: str, facets: list | None = None) -> None:
     # 1. create a session
     session_body = json.dumps(
         {"identifier": BSKY_HANDLE, "password": BSKY_APP_PASSWORD}
@@ -110,6 +149,8 @@ def bsky_post(text: str) -> None:
         "text": text,
         "createdAt": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
     }
+    if facets:
+        record["facets"] = facets
     post_body = json.dumps(
         {"repo": did, "collection": "app.bsky.feed.post", "record": record}
     ).encode()
@@ -140,13 +181,14 @@ def main() -> int:
 
     verb = "will" if will else "will not"
     text = f"Fable {verb} talk about {title}"
+    text, facets = with_random_tag(text)
 
     if DRY_RUN or not (BSKY_HANDLE and BSKY_APP_PASSWORD):
         log(f"DRY_RUN post: {text!r}")
         return 0
 
     try:
-        bsky_post(text)
+        bsky_post(text, facets)
     except Exception as e:
         log(f"ERROR posting to Bluesky ({text!r}): {e!r}")
         return 1
