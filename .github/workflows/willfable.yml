@@ -1,0 +1,38 @@
+name: WillFable
+
+on:
+  schedule:
+    # Every 10 minutes. GitHub cron is best-effort and often runs late —
+    # harmless for this bot. (Times are UTC.)
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}  # lets you trigger a manual run from the Actions tab
+
+# Prevent overlapping runs if one is slow — a late run won't stack on the next.
+concurrency:
+  group: willfable
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install anthropic
+
+      - name: Run one cycle
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+          # Logs to stdout only in Actions (no persistent file needed).
+          WILLFABLE_LOG: /dev/null
+        run: python willfable.py

@@ -1,0 +1,22 @@
+# Secrets — never commit (public repo!)
+api_key.txt
+api_curl.txt
+*.key
+*.pem
+.env
+.env.*
+willfable.env
+
+# Dead Oracle-VM artifacts — not needed for the GitHub Actions deploy
+ssh-key-*.key
+ssh-key-*.key.pub
+
+# Local logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
