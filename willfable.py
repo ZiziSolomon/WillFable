@@ -148,22 +148,25 @@ class _FacetText:
 def build_post(verb: str, title: str, will: bool) -> tuple[str, list]:
     """Return (text, facets) for the post.
 
-    Layout:  Fable <verb> talk about <TITLE-linked> #fablewill|#fablewont #<topic>
+    Layout:  Fable <verb> talk about <TITLE-linked> #fablewill|#fablewont [#<topic>]
 
     - the title is a clickable link to its Wikipedia article
-    - a verdict tag (#fablewill / #fablewont) comes first
-    - then one random topical tag from HASHTAGS
+    - a verdict tag (#fablewill / #fablewont) always comes first
+    - a random topical tag from HASHTAGS is added ONLY on refusals ("will not"):
+      refusals are rare and interesting, so we reserve the broad-audience tags
+      for them instead of spamming them on every routine "will" post.
     """
     verdict_tag = "fablewill" if will else "fablewont"
-    topic_tag = random.choice(HASHTAGS)
 
     ft = _FacetText()
     ft.add(f"Fable {verb} talk about ")
     ft.add(title, {"$type": "app.bsky.richtext.facet#link", "uri": wiki_url(title)})
     ft.add(" ")
     ft.add("#" + verdict_tag, {"$type": "app.bsky.richtext.facet#tag", "tag": verdict_tag})
-    ft.add(" ")
-    ft.add("#" + topic_tag, {"$type": "app.bsky.richtext.facet#tag", "tag": topic_tag})
+    if not will:
+        topic_tag = random.choice(HASHTAGS)
+        ft.add(" ")
+        ft.add("#" + topic_tag, {"$type": "app.bsky.richtext.facet#tag", "tag": topic_tag})
     return ft.text, ft.facets
 
 
