@@ -26,6 +26,7 @@ import json
 import time
 import random
 import datetime
+import urllib.parse
 import urllib.request
 import urllib.error
 
@@ -43,10 +44,11 @@ MODEL = "claude-fable-5"
 MAX_TOKENS = 50  # observed to be enough for a real refusal to surface
 PROMPT_TEMPLATE = "Hi Claude, tell me about {title}"
 
-# One hashtag is appended per post, picked at random from this pool. These are
-# the crowds the bot wants to land in — Anthropic / LLM / Fable / mythos.
-# (No leading '#'; it's added when rendering. Bluesky tags are case-insensitive
-# for search but display as written.)
+# One topical hashtag is appended per post (after the #fablewill/#fablewont
+# verdict tag), picked at random from this pool. These are the crowds the bot
+# wants to land in — Anthropic / LLM / Fable / mythos. (No leading '#'; it's
+# added when rendering. Bluesky tags are case-insensitive for search but
+# display as written.)
 HASHTAGS = [
     "LLM",
     "Anthropic",
@@ -107,27 +109,62 @@ def fable_will_talk(title: str) -> bool:
     return r.stop_reason != "refusal"
 
 
-def with_random_tag(text: str) -> tuple[str, list]:
-    """Append a random hashtag and return (new_text, facets).
+def wiki_url(title: str) -> str:
+    """Build the canonical Wikipedia article URL for a title.
 
-    The facet's byte offsets are into the UTF-8 encoding of the returned text,
-    per the atproto richtext spec — NOT character indices. Titles can contain
-    non-ASCII, so we measure in bytes.
+    Spaces become underscores; everything else is percent-encoded. `safe=":"`
+    keeps colons readable (they're legal, unencoded, in article paths).
     """
-    tag = random.choice(HASHTAGS)
-    prefix = text + " "
-    new_text = prefix + "#" + tag
-    start = len(prefix.encode("utf-8"))            # byte index of '#'
-    end = len(new_text.encode("utf-8"))            # byte index past tag end
-    facets = [
-        {
-            "index": {"byteStart": start, "byteEnd": end},
-            "features": [
-                {"$type": "app.bsky.richtext.facet#tag", "tag": tag}
-            ],
-        }
-    ]
-    return new_text, facets
+    slug = urllib.parse.quote(title.replace(" ", "_"), safe=":")
+    return f"https://en.wikipedia.org/wiki/{slug}"
+
+
+class _FacetText:
+    """Assembles post text piece by piece, tracking UTF-8 byte offsets so we
+    can attach richtext facets (links, tags) to exact byte ranges.
+
+    atproto facet indices are byte offsets into the UTF-8 text, NOT character
+    indices — titles/tags may be non-ASCII, so everything is measured in bytes.
+    """
+
+    def __init__(self) -> None:
+        self.text = ""
+        self.facets: list = []
+
+    def _bytelen(self) -> int:
+        return len(self.text.encode("utf-8"))
+
+    def add(self, s: str, feature: dict | None = None) -> None:
+        """Append `s`. If `feature` is given, wrap the appended span in a facet."""
+        start = self._bytelen()
+        self.text += s
+        if feature is not None:
+            self.facets.append({
+                "index": {"byteStart": start, "byteEnd": self._bytelen()},
+                "features": [feature],
+            })
+
+
+def build_post(verb: str, title: str, will: bool) -> tuple[str, list]:
+    """Return (text, facets) for the post.
+
+    Layout:  Fable <verb> talk about <TITLE-linked> #fablewill|#fablewont #<topic>
+
+    - the title is a clickable link to its Wikipedia article
+    - a verdict tag (#fablewill / #fablewont) comes first
+    - then one random topical tag from HASHTAGS
+    """
+    verdict_tag = "fablewill" if will else "fablewont"
+    topic_tag = random.choice(HASHTAGS)
+
+    ft = _FacetText()
+    ft.add(f"Fable {verb} talk about ")
+    ft.add(title, {"$type": "app.bsky.richtext.facet#link", "uri": wiki_url(title)})
+    ft.add(" ")
+    ft.add("#" + verdict_tag, {"$type": "app.bsky.richtext.facet#tag", "tag": verdict_tag})
+    ft.add(" ")
+    ft.add("#" + topic_tag, {"$type": "app.bsky.richtext.facet#tag", "tag": topic_tag})
+    return ft.text, ft.facets
 
 
 def bsky_post(text: str, facets: list | None = None) -> None:
@@ -183,8 +220,7 @@ def main() -> int:
         return 1
 
     verb = "will" if will else "will not"
-    text = f"Fable {verb} talk about {title}"
-    text, facets = with_random_tag(text)
+    text, facets = build_post(verb, title, will)
 
     if DRY_RUN or not (BSKY_HANDLE and BSKY_APP_PASSWORD):
         log(f"DRY_RUN post: {text!r}")

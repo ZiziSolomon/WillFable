@@ -1,11 +1,10 @@
 name: WillFable
 
 on:
-  schedule:
-    # Every 10 minutes. GitHub cron is best-effort and often runs late —
-    # harmless for this bot. (Times are UTC.)
-    - cron: "*/10 * * * *"
-  workflow_dispatch: {}  # lets you trigger a manual run from the Actions tab
+  # No schedule: trigger — GitHub's cron throttles high-frequency jobs (it was
+  # slipping to ~90-min gaps). A Cloudflare Worker (see cron-worker/) fires the
+  # workflow_dispatch below every 10 minutes reliably instead.
+  workflow_dispatch: {}  # triggered by the Cloudflare cron Worker (and manual runs)
 
 # Prevent overlapping runs if one is slow — a late run won't stack on the next.
 concurrency:
